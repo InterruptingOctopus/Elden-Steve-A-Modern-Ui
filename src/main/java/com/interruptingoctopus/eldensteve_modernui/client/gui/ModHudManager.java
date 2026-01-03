@@ -31,7 +31,7 @@ public class ModHudManager {
     private static final List<MeterBar> rightMeters = new ArrayList<>();
     private static final CustomHotbar leftHotbar = new CustomHotbar(MeterBar.Alignment.LEFT);
     private static final CustomHotbar rightHotbar = new CustomHotbar(MeterBar.Alignment.RIGHT);
-    private static final XpOrb xpOrb = new XpOrb(1.5f);
+    private static final XpOrb xpOrb = new XpOrb(1.05f);
     public static final MeterBar xpBar;
 
     public static void setVanillaLayerVisibility(Identifier layerName, boolean isVisible) {
@@ -60,12 +60,21 @@ public class ModHudManager {
         // --- Layout Calculations ---
         int orbWidth = xpOrb.getUnscaledWidth(player);
         int hotbarHeight = leftHotbar.getUnscaledHeight();
-        int xpBarHeight = xpBar.getUnscaledHeight();
-        int baseY = screenHeight - hotbarHeight - xpBarHeight - 2;
+        // In Creative mode, we hide the XP bar, so we don't reserve space for it.
+        int xpBarHeight = player.isCreative() ? 0 : xpBar.getUnscaledHeight();
+        int baseY = screenHeight - hotbarHeight - xpBarHeight - 5;
+
+        // --- Custom XP Bar (Rendered First / Behind) ---
+        if (!player.isCreative()) {
+            int customXpBarWidth = xpBar.getUnscaledWidth(player);
+            int customXpBarX = (screenWidth - customXpBarWidth) / 2;
+            int customXpBarY = baseY + hotbarHeight + 2;
+            xpBar.render(guiGraphics, player, customXpBarX, customXpBarY);
+        }
 
         // --- Centerpiece: XP Orb ---
         int orbX = (screenWidth - orbWidth) / 2;
-        int orbY = baseY - (xpOrb.getUnscaledHeight() - hotbarHeight) / 2;
+        int orbY = baseY - (xpOrb.getUnscaledHeight() - hotbarHeight) / 2 - 1;
         xpOrb.render(guiGraphics, player, orbX, orbY);
 
         // --- Hotbars connected to the Orb ---
@@ -76,24 +85,20 @@ public class ModHudManager {
         rightHotbar.render(guiGraphics, player, rightHotbarX, baseY, UIState.mainHandIndex);
 
         // --- Meters (Above Hotbars) ---
-        int currentY = baseY;
-        for (MeterBar meter : leftMeters) {
-            currentY -= meter.getUnscaledHeight();
-            meter.render(guiGraphics, player, leftHotbarX, currentY);
-        }
+        if (!player.isCreative()) {
+            int currentY = baseY;
+            for (MeterBar meter : leftMeters) {
+                currentY -= meter.getUnscaledHeight();
+                meter.render(guiGraphics, player, leftHotbarX, currentY);
+            }
 
-        currentY = baseY;
-        for (MeterBar meter : rightMeters) {
-            currentY -= meter.getUnscaledHeight();
-            int meterX = rightHotbarX + rightHotbar.getUnscaledWidth(player);
-            meter.render(guiGraphics, player, meterX, currentY);
+            currentY = baseY;
+            for (MeterBar meter : rightMeters) {
+                currentY -= meter.getUnscaledHeight();
+                int meterX = rightHotbarX + rightHotbar.getUnscaledWidth(player);
+                meter.render(guiGraphics, player, meterX, currentY);
+            }
         }
-
-        // --- Custom XP Bar (Below Hotbars) ---
-        int customXpBarWidth = xpBar.getUnscaledWidth(player);
-        int customXpBarX = (screenWidth - customXpBarWidth) / 2;
-        int customXpBarY = baseY + hotbarHeight + 2;
-        xpBar.render(guiGraphics, player, customXpBarX, customXpBarY);
     }
 
     static {

@@ -3,24 +3,17 @@ package com.interruptingoctopus.eldensteve_modernui.client.event;
 import com.interruptingoctopus.eldensteve_modernui.client.gui.ModKeyMappings;
 import com.interruptingoctopus.eldensteve_modernui.client.gui.UIState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.inventory.ClickType;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 
 /**
  * Handles all custom input events for the mod.
  */
 public class KeyInputHandler {
-
-    @SubscribeEvent
-    public static void onKeyMappingTriggered(InputEvent.InteractionKeyMappingTriggered event) {
-        // Handle the vanilla "Swap Item" action (default 'F')
-        if (event.getKeyMapping() == Minecraft.getInstance().options.keySwapOffhand) {
-            swapItems();
-            event.setCanceled(true);
-        }
-    }
 
     @SubscribeEvent
     public static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
@@ -34,7 +27,13 @@ public class KeyInputHandler {
 
         if (ModKeyMappings.SWAP_HOTBAR_KEY.isDown()) {
             // 'R' is held: Scroll the off-hand selection index
-            UIState.offHandIndex = (UIState.offHandIndex + scrollDirection + 5) % 5;
+            int oldIndex = UIState.offHandIndex;
+            int newIndex = (oldIndex + scrollDirection + 5) % 5;
+            
+            if (oldIndex != newIndex) {
+                UIState.offHandIndex = newIndex;
+                performOffhandSwap(oldIndex, newIndex);
+            }
         } else {
             // Default: Scroll the main-hand selection index
             UIState.mainHandIndex = (UIState.mainHandIndex + scrollDirection + 5) % 5;
@@ -43,30 +42,48 @@ public class KeyInputHandler {
         }
     }
 
-    /**
-     * Swaps the item under the main-hand selector with the item under the off-hand selector.
-     */
-    private static void swapItems() {
+    @SubscribeEvent
+    public static void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
+        // Prioritize the off-hand item usage over the main-hand item usage.
+        // This ensures that right-clicking activates the item in the left hotbar (off-hand).
+        if (event.getHand() == InteractionHand.MAIN_HAND) {
+            if (!event.getEntity().getOffhandItem().isEmpty()) {
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.PASS);
+            }
+        }
+    }
+
+    private static void performOffhandSwap(int oldIndex, int newIndex) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) return;
+        if (mc.player == null || mc.gameMode == null) return;
 
-        Inventory inventory = mc.player.getInventory();
-        
-        // Get the inventory slot for the main-hand selection
-        int mainHandSlot = UIState.mainHandIndex + 4;
-
-        // Get the inventory slot for the off-hand selection
-        int offHandSlot;
-        if (UIState.offHandIndex == 0) {
-            offHandSlot = 40; // The actual off-hand slot
-        } else {
-            offHandSlot = UIState.offHandIndex - 1; // Slots 0-3
+        // 1. Restore old item to its slot (if it wasn't the base offhand slot)
+        if (oldIndex != 0) {
+            int slot = getContainerSlot(oldIndex);
+            swapContainerSlots(mc, 45, slot); // 45 is Offhand in Container 0
         }
 
-        ItemStack mainHandStack = inventory.getItem(mainHandSlot);
-        ItemStack offHandStack = inventory.getItem(offHandSlot);
+        // 2. Bring new item from its slot (if it isn't the base offhand slot)
+        if (newIndex != 0) {
+            int slot = getContainerSlot(newIndex);
+            swapContainerSlots(mc, 45, slot);
+        }
+    }
 
-        inventory.setItem(mainHandSlot, offHandStack);
-        inventory.setItem(offHandSlot, mainHandStack);
+    private static int getContainerSlot(int index) {
+        // index 1 -> Inv 0 -> Cont 36
+        // index 2 -> Inv 1 -> Cont 37
+        // ...
+        return 36 + (index - 1);
+    }
+
+    private static void swapContainerSlots(Minecraft mc, int slotA, int slotB) {
+        // Click A (Pickup)
+        mc.gameMode.handleInventoryMouseClick(0, slotA, 0, ClickType.PICKUP, mc.player);
+        // Click B (Swap)
+        mc.gameMode.handleInventoryMouseClick(0, slotB, 0, ClickType.PICKUP, mc.player);
+        // Click A (Place)
+        mc.gameMode.handleInventoryMouseClick(0, slotA, 0, ClickType.PICKUP, mc.player);
     }
 }
